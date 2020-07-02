@@ -46,7 +46,7 @@ mod tests {
             Comparison::Different(
                 &json("\"foo\""),
                 &json("\"baz\""),
-                vec![Difference::MismatchedString("foo", "baz")]
+                Difference::MismatchedString("foo", "baz")
             )
         );
 
@@ -55,10 +55,10 @@ mod tests {
             Comparison::Different(
                 &json("1.5"),
                 &json("0"),
-                vec![Difference::MismatchedNumber(
+                Difference::MismatchedNumber(
                     &serde_json::Number::from_f64(1.5).unwrap(),
                     &serde_json::Number::from(0)
-                )]
+                )
             )
         );
 
@@ -67,7 +67,7 @@ mod tests {
             Comparison::Different(
                 &json("1.5"),
                 &json("\"baz\""),
-                vec![Difference::MismatchedTypes(&json("1.5"), &json("\"baz\""))]
+                Difference::MismatchedTypes(&json("1.5"), &json("\"baz\""))
             )
         );
     }
@@ -79,7 +79,10 @@ mod tests {
             Comparison::Different(
                 &json("[1, 2, 3, 4]"),
                 &json("[1, 2, 3]"),
-                vec![Difference::RemovedArrayValue(3, &json("4")),]
+                Difference::MismatchedArray(Box::new(vec![Difference::RemovedArrayValue(
+                    3,
+                    &json("4")
+                ),]))
             )
         );
 
@@ -88,7 +91,10 @@ mod tests {
             Comparison::Different(
                 &json("[1, 2, 3]"),
                 &json("[1, 2, 3, 4]"),
-                vec![Difference::AddedArrayValue(3, &json("4")),]
+                Difference::MismatchedArray(Box::new(vec![Difference::AddedArrayValue(
+                    3,
+                    &json("4")
+                ),]))
             )
         );
 
@@ -97,13 +103,13 @@ mod tests {
             Comparison::Different(
                 &json("[1, 2, 3]"),
                 &json("[1, 2, 4]"),
-                vec![Difference::ArrayDifference(
+                Difference::MismatchedArray(Box::new(vec![Difference::ArrayDifference(
                     2,
                     Box::new(Difference::MismatchedNumber(
                         &serde_json::Number::from(3),
                         &serde_json::Number::from(4)
                     ))
-                )]
+                )]))
             )
         );
 
@@ -112,7 +118,7 @@ mod tests {
             Comparison::Different(
                 &json("[1, 2, 3]"),
                 &json("[\"1\", \"2\", \"4\"]"),
-                vec![
+                Difference::MismatchedArray(Box::new(vec![
                     Difference::ArrayDifference(
                         0,
                         Box::new(Difference::MismatchedTypes(&json("1"), &json("\"1\"")))
@@ -125,7 +131,7 @@ mod tests {
                         2,
                         Box::new(Difference::MismatchedTypes(&json("3"), &json("\"4\"")))
                     )
-                ]
+                ]))
             )
         );
     }
@@ -137,10 +143,10 @@ mod tests {
             Comparison::Different(
                 &json("{\"name\": \"Jane\"}"),
                 &json("{\"name\": \"John\"}"),
-                vec![Difference::MismatchedObjectValue(
+                Difference::MismatchedObject(Box::new(vec![Difference::MismatchedObjectValue(
                     "name",
-                    Box::new(vec![Difference::MismatchedString("Jane", "John")])
-                )]
+                    Box::new(Difference::MismatchedString("Jane", "John"))
+                )]))
             )
         );
 
@@ -152,13 +158,13 @@ mod tests {
             Comparison::Different(
                 &json("{\"name\": \"Jane\", \"age\": 30}"),
                 &json("{\"name\": \"John\"}"),
-                vec![
+                Difference::MismatchedObject(Box::new(vec![
                     Difference::RemovedObjectKey("age", &json("30")),
                     Difference::MismatchedObjectValue(
                         "name",
-                        Box::new(vec![Difference::MismatchedString("Jane", "John")])
+                        Box::new(Difference::MismatchedString("Jane", "John"))
                     ),
-                ]
+                ]))
             )
         );
 
@@ -170,13 +176,13 @@ mod tests {
             Comparison::Different(
                 &json("{\"name\": \"Jane\"}"),
                 &json("{\"name\": \"John\", \"age\": 30}"),
-                vec![
+                Difference::MismatchedObject(Box::new(vec![
                     Difference::MismatchedObjectValue(
                         "name",
-                        Box::new(vec![Difference::MismatchedString("Jane", "John")])
+                        Box::new(Difference::MismatchedString("Jane", "John"))
                     ),
                     Difference::AddedObjectKey("age", &json("30")),
-                ]
+                ]))
             )
         );
 
@@ -188,20 +194,23 @@ mod tests {
             Comparison::Different(
                 &json("{\"name\": \"Jane\", \"dob\": \"01/01/1990\"}"),
                 &json("{\"name\": \"John\", \"age\": 30}"),
-                vec![
+                Difference::MismatchedObject(Box::new(vec![
                     Difference::RemovedObjectKey("dob", &json("\"01/01/1990\"")),
                     Difference::MismatchedObjectValue(
                         "name",
-                        Box::new(vec![Difference::MismatchedString("Jane", "John")])
+                        Box::new(Difference::MismatchedString("Jane", "John"))
                     ),
                     Difference::AddedObjectKey("age", &json("30")),
-                ]
+                ]))
             )
         );
     }
 
     #[test]
     fn complex_example() {
+        let removed_json = json("{\"person\": {\"name\": \"Jane\", \"age\": 31}}");
+        let removed_array = Difference::RemovedArrayValue(1, &removed_json);
+
         assert_eq!(
             compare(
                 &json("[{\"person\": {\"name\": \"John\", \"age\": 31}}, {\"person\": {\"name\": \"Jane\", \"age\": 31}}]"),
@@ -210,22 +219,26 @@ mod tests {
             Comparison::Different(
                 &json("[{\"person\": {\"name\": \"John\", \"age\": 31}}, {\"person\": {\"name\": \"Jane\", \"age\": 31}}]"),
                 &json("[{\"person\": {\"name\": \"John\", \"age\": 30}}]"),
-
-
-                vec![
-                    Difference::ArrayDifference(0,
-                        Box::new(Difference::MismatchedObjectValue("person",
-                        Box::new(vec![
-                            Difference::MismatchedObjectValue("age",
-                                Box::new(vec![Difference::MismatchedNumber(
-                                        &serde_json::Number::from(31),
-                                        &serde_json::Number::from(30)
-                                )])
-                            )
-                        ])),
-                    )),
-                    Difference::RemovedArrayValue(1, &json("{\"person\": {\"name\": \"Jane\", \"age\": 31}}")),
-                ]
+                Difference::MismatchedArray(Box::new(vec![
+                    Difference::ArrayDifference(
+                        0,
+                        Box::new(Difference::MismatchedObject(Box::new(vec![
+                            Difference::MismatchedObjectValue(
+                                "person",
+                                Box::new(Difference::MismatchedObject(Box::new(vec![
+                                    Difference::MismatchedObjectValue(
+                                        "age",
+                                        Box::new(Difference::MismatchedNumber(
+                                            &serde_json::Number::from(31),
+                                            &serde_json::Number::from(30),
+                                        )),
+                                    ),
+                                ])))
+                            ),
+                        ]))),
+                    ),
+                    removed_array,
+                ]))
             )
         );
     }

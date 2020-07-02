@@ -4,39 +4,36 @@ use serde_json::Value;
 #[derive(Debug, PartialEq)]
 pub enum Comparison<'a> {
     Same(&'a Value, &'a Value),
-    Different(&'a Value, &'a Value, Vec<Difference<'a>>),
+    Different(&'a Value, &'a Value, Difference<'a>),
 }
 
 pub fn compare<'a>(left: &'a Value, right: &'a Value) -> Comparison<'a> {
-    match compare_values(left, right).as_slice() {
-        [] => Comparison::Same(left, right),
-        otherwise => Comparison::Different(left, right, otherwise.to_vec()),
+    match compare_values(left, right) {
+        None => Comparison::Same(left, right),
+        Some(otherwise) => Comparison::Different(left, right, otherwise),
     }
 }
 
-fn compare_values<'a>(left: &'a Value, right: &'a Value) -> Vec<Difference<'a>> {
+fn compare_values<'a>(left: &'a Value, right: &'a Value) -> Option<Difference<'a>> {
     if left == right {
-        vec![]
+        None
     } else {
-        compare_different_values(left, right)
+        Some(compare_different_values(left, right))
     }
 }
 
-fn compare_different_values<'a>(left: &'a Value, right: &'a Value) -> Vec<Difference<'a>> {
+fn compare_different_values<'a>(left: &'a Value, right: &'a Value) -> Difference<'a> {
     match (left, right) {
-        (Value::String(v1), Value::String(v2)) => vec![Difference::MismatchedString(v1, v2)],
-        (Value::Number(v1), Value::Number(v2)) => vec![Difference::MismatchedNumber(v1, v2)],
-        (Value::Bool(v1), Value::Bool(v2)) => vec![Difference::MismatchedBool(*v1, *v2)],
+        (Value::String(v1), Value::String(v2)) => Difference::MismatchedString(v1, v2),
+        (Value::Number(v1), Value::Number(v2)) => Difference::MismatchedNumber(v1, v2),
+        (Value::Bool(v1), Value::Bool(v2)) => Difference::MismatchedBool(*v1, *v2),
         (Value::Array(v1), Value::Array(v2)) => compare_arrays_of_values(v1, v2),
         (Value::Object(v1), Value::Object(v2)) => compare_maps(v1, v2),
-        (_, _) => vec![Difference::MismatchedTypes(left, right)],
+        (_, _) => Difference::MismatchedTypes(left, right),
     }
 }
 
-fn compare_arrays_of_values<'a>(
-    left: &'a Vec<Value>,
-    right: &'a Vec<Value>,
-) -> Vec<Difference<'a>> {
+fn compare_arrays_of_values<'a>(left: &'a Vec<Value>, right: &'a Vec<Value>) -> Difference<'a> {
     let mut differences: Vec<Difference<'a>> = vec![];
 
     let mut rights = right.iter();
@@ -56,13 +53,13 @@ fn compare_arrays_of_values<'a>(
         differences.push(Difference::AddedArrayValue(index + left.len(), remainder));
     }
 
-    differences
+    Difference::MismatchedArray(Box::new(differences))
 }
 
 fn compare_maps<'a>(
     left: &'a serde_json::Map<String, Value>,
     right: &'a serde_json::Map<String, Value>,
-) -> Vec<Difference<'a>> {
+) -> Difference<'a> {
     let mut differences: Vec<Difference<'a>> = vec![];
     let mut left_keys: Vec<String> = vec![];
 
@@ -70,12 +67,11 @@ fn compare_maps<'a>(
         left_keys.push(key.to_string());
         match right.get(key) {
             None => differences.push(Difference::RemovedObjectKey(key, left_value)),
-            Some(right_value) => match compare_values(left_value, right_value).as_slice() {
-                [] => (),
-                otherwise => differences.push(Difference::MismatchedObjectValue(
-                    key,
-                    Box::new(otherwise.to_vec()),
-                )),
+            Some(right_value) => match compare_values(left_value, right_value) {
+                None => (),
+                Some(otherwise) => {
+                    differences.push(Difference::MismatchedObjectValue(key, Box::new(otherwise)))
+                }
             },
         }
     }
@@ -88,5 +84,5 @@ fn compare_maps<'a>(
         differences.push(Difference::AddedObjectKey(key, right.get(key).unwrap()))
     }
 
-    differences
+    Difference::MismatchedObject(Box::new(differences))
 }
