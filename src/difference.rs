@@ -2,8 +2,6 @@ use serde_json::Value;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Difference<'a> {
-    Extra(serde_json::Map<String, Value>),
-    Missing(serde_json::Map<String, Value>),
     MismatchedString(&'a str, &'a str),
     MismatchedNumber(&'a serde_json::Number, &'a serde_json::Number),
     MismatchedBool(bool, bool),
