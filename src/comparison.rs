@@ -1,4 +1,4 @@
-use super::Difference;
+use super::{ArrayDifference, Difference, ObjectDifference};
 use serde_json::Value;
 
 #[derive(Debug, PartialEq)]
@@ -34,7 +34,7 @@ fn compare_different_values<'a>(left: &'a Value, right: &'a Value) -> Difference
 }
 
 fn compare_arrays_of_values<'a>(left: &'a Vec<Value>, right: &'a Vec<Value>) -> Difference<'a> {
-    let mut differences: Vec<Difference<'a>> = vec![];
+    let mut differences: Vec<ArrayDifference<'a>> = vec![];
 
     let mut rights = right.iter();
     for (index, left_item) in left.iter().enumerate() {
@@ -42,35 +42,38 @@ fn compare_arrays_of_values<'a>(left: &'a Vec<Value>, right: &'a Vec<Value>) -> 
             Some(right_item) => differences.extend(
                 compare_values(left_item, right_item)
                     .into_iter()
-                    .map(|v| Difference::ArrayDifference(index, Box::new(v)))
+                    .map(|v| ArrayDifference::ArrayDifference(index, v))
                     .collect::<Vec<_>>(),
             ),
-            None => differences.push(Difference::RemovedArrayValue(index, left_item)),
+            None => differences.push(ArrayDifference::RemovedArrayValue(index, left_item)),
         }
     }
 
     for (index, remainder) in rights.enumerate() {
-        differences.push(Difference::AddedArrayValue(index + left.len(), remainder));
+        differences.push(ArrayDifference::AddedArrayValue(
+            index + left.len(),
+            remainder,
+        ));
     }
 
-    Difference::MismatchedArray(Box::new(differences))
+    Difference::MismatchedArray(differences)
 }
 
 fn compare_maps<'a>(
     left: &'a serde_json::Map<String, Value>,
     right: &'a serde_json::Map<String, Value>,
 ) -> Difference<'a> {
-    let mut differences: Vec<Difference<'a>> = vec![];
+    let mut differences: Vec<ObjectDifference<'a>> = vec![];
     let mut left_keys: Vec<String> = vec![];
 
     for (key, left_value) in left {
         left_keys.push(key.to_string());
         match right.get(key) {
-            None => differences.push(Difference::RemovedObjectKey(key, left_value)),
+            None => differences.push(ObjectDifference::RemovedObjectKey(key, left_value)),
             Some(right_value) => match compare_values(left_value, right_value) {
                 None => (),
                 Some(otherwise) => {
-                    differences.push(Difference::MismatchedObjectValue(key, Box::new(otherwise)))
+                    differences.push(ObjectDifference::MismatchedObjectValue(key, otherwise))
                 }
             },
         }
@@ -81,8 +84,11 @@ fn compare_maps<'a>(
     right_keys.retain(|&x| !left_keys.contains(x));
 
     for key in right_keys {
-        differences.push(Difference::AddedObjectKey(key, right.get(key).unwrap()))
+        differences.push(ObjectDifference::AddedObjectKey(
+            key,
+            right.get(key).unwrap(),
+        ))
     }
 
-    Difference::MismatchedObject(Box::new(differences))
+    Difference::MismatchedObject(differences)
 }

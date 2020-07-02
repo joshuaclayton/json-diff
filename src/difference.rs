@@ -5,14 +5,21 @@ pub enum Difference<'a> {
     MismatchedString(&'a str, &'a str),
     MismatchedNumber(&'a serde_json::Number, &'a serde_json::Number),
     MismatchedBool(bool, bool),
-    MismatchedValue(&'a Value, &'a Value),
     MismatchedTypes(&'a Value, &'a Value),
+    MismatchedArray(Vec<ArrayDifference<'a>>),
+    MismatchedObject(Vec<ObjectDifference<'a>>),
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum ObjectDifference<'a> {
+    AddedObjectKey(&'a str, &'a Value),
+    RemovedObjectKey(&'a str, &'a Value),
+    MismatchedObjectValue(&'a str, Difference<'a>),
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum ArrayDifference<'a> {
+    ArrayDifference(usize, Difference<'a>),
     RemovedArrayValue(usize, &'a Value),
     AddedArrayValue(usize, &'a Value),
-    MismatchedObjectValue(&'a str, Box<Difference<'a>>),
-    MismatchedArray(Box<Vec<Difference<'a>>>),
-    MismatchedObject(Box<Vec<Difference<'a>>>),
-    ArrayDifference(usize, Box<Difference<'a>>),
-    RemovedObjectKey(&'a str, &'a Value),
-    AddedObjectKey(&'a str, &'a Value),
 }
