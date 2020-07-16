@@ -1,4 +1,4 @@
-use super::{ArrayDifference, Difference, ObjectDifference};
+use super::{ArrayComparison, Difference, ObjectComparison};
 use serde_json::Value;
 
 #[derive(Debug, PartialEq)]
@@ -34,46 +34,46 @@ fn compare_different_values<'a>(left: &'a Value, right: &'a Value) -> Difference
 }
 
 fn compare_arrays_of_values<'a>(left: &'a Vec<Value>, right: &'a Vec<Value>) -> Difference<'a> {
-    let mut differences: Vec<ArrayDifference<'a>> = vec![];
+    let mut comparisons: Vec<ArrayComparison<'a>> = vec![];
 
     let mut rights = right.iter();
     for (index, left_item) in left.iter().enumerate() {
         match rights.next() {
-            Some(right_item) => differences.extend(
-                compare_values(left_item, right_item)
-                    .into_iter()
-                    .map(|v| ArrayDifference::ArrayDifference(index, v))
-                    .collect::<Vec<_>>(),
-            ),
-            None => differences.push(ArrayDifference::RemovedArrayValue(index, left_item)),
+            Some(right_item) => match compare_values(left_item, right_item) {
+                None => comparisons.extend(vec![ArrayComparison::Same(index, right_item)]),
+                Some(otherwise) => {
+                    comparisons.extend(vec![ArrayComparison::ArrayDifference(index, otherwise)])
+                }
+            },
+            None => comparisons.push(ArrayComparison::RemovedArrayValue(index, left_item)),
         }
     }
 
     for (index, remainder) in rights.enumerate() {
-        differences.push(ArrayDifference::AddedArrayValue(
+        comparisons.push(ArrayComparison::AddedArrayValue(
             index + left.len(),
             remainder,
         ));
     }
 
-    Difference::MismatchedArray(differences)
+    Difference::MismatchedArray(comparisons)
 }
 
 fn compare_maps<'a>(
     left: &'a serde_json::Map<String, Value>,
     right: &'a serde_json::Map<String, Value>,
 ) -> Difference<'a> {
-    let mut differences: Vec<ObjectDifference<'a>> = vec![];
+    let mut comparisons: Vec<ObjectComparison<'a>> = vec![];
     let mut left_keys: Vec<String> = vec![];
 
     for (key, left_value) in left {
         left_keys.push(key.to_string());
         match right.get(key) {
-            None => differences.push(ObjectDifference::RemovedObjectKey(key, left_value)),
+            None => comparisons.push(ObjectComparison::RemovedObjectKey(key, left_value)),
             Some(right_value) => match compare_values(left_value, right_value) {
-                None => (),
+                None => comparisons.push(ObjectComparison::Same(key, right_value)),
                 Some(otherwise) => {
-                    differences.push(ObjectDifference::MismatchedObjectValue(key, otherwise))
+                    comparisons.push(ObjectComparison::MismatchedObjectValue(key, otherwise))
                 }
             },
         }
@@ -84,11 +84,11 @@ fn compare_maps<'a>(
     right_keys.retain(|&x| !left_keys.contains(x));
 
     for key in right_keys {
-        differences.push(ObjectDifference::AddedObjectKey(
+        comparisons.push(ObjectComparison::AddedObjectKey(
             key,
             right.get(key).unwrap(),
         ))
     }
 
-    Difference::MismatchedObject(differences)
+    Difference::MismatchedObject(comparisons)
 }

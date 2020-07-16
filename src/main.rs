@@ -79,10 +79,12 @@ mod tests {
             Comparison::Different(
                 &json("[1, 2, 3, 4]"),
                 &json("[1, 2, 3]"),
-                Difference::MismatchedArray(vec![ArrayDifference::RemovedArrayValue(
-                    3,
-                    &json("4")
-                ),])
+                Difference::MismatchedArray(vec![
+                    ArrayComparison::Same(0, &json("1")),
+                    ArrayComparison::Same(1, &json("2")),
+                    ArrayComparison::Same(2, &json("3")),
+                    ArrayComparison::RemovedArrayValue(3, &json("4"))
+                ])
             )
         );
 
@@ -91,7 +93,12 @@ mod tests {
             Comparison::Different(
                 &json("[1, 2, 3]"),
                 &json("[1, 2, 3, 4]"),
-                Difference::MismatchedArray(vec![ArrayDifference::AddedArrayValue(3, &json("4")),])
+                Difference::MismatchedArray(vec![
+                    ArrayComparison::Same(0, &json("1")),
+                    ArrayComparison::Same(1, &json("2")),
+                    ArrayComparison::Same(2, &json("3")),
+                    ArrayComparison::AddedArrayValue(3, &json("4")),
+                ])
             )
         );
 
@@ -100,13 +107,17 @@ mod tests {
             Comparison::Different(
                 &json("[1, 2, 3]"),
                 &json("[1, 2, 4]"),
-                Difference::MismatchedArray(vec![ArrayDifference::ArrayDifference(
-                    2,
-                    Difference::MismatchedNumber(
-                        &serde_json::Number::from(3),
-                        &serde_json::Number::from(4)
+                Difference::MismatchedArray(vec![
+                    ArrayComparison::Same(0, &json("1")),
+                    ArrayComparison::Same(1, &json("2")),
+                    ArrayComparison::ArrayDifference(
+                        2,
+                        Difference::MismatchedNumber(
+                            &serde_json::Number::from(3),
+                            &serde_json::Number::from(4)
+                        )
                     )
-                )])
+                ])
             )
         );
 
@@ -116,15 +127,15 @@ mod tests {
                 &json("[1, 2, 3]"),
                 &json("[\"1\", \"2\", \"4\"]"),
                 Difference::MismatchedArray(vec![
-                    ArrayDifference::ArrayDifference(
+                    ArrayComparison::ArrayDifference(
                         0,
                         Difference::MismatchedTypes(&json("1"), &json("\"1\""))
                     ),
-                    ArrayDifference::ArrayDifference(
+                    ArrayComparison::ArrayDifference(
                         1,
                         Difference::MismatchedTypes(&json("2"), &json("\"2\""))
                     ),
-                    ArrayDifference::ArrayDifference(
+                    ArrayComparison::ArrayDifference(
                         2,
                         Difference::MismatchedTypes(&json("3"), &json("\"4\""))
                     )
@@ -140,7 +151,7 @@ mod tests {
             Comparison::Different(
                 &json("{\"name\": \"Jane\"}"),
                 &json("{\"name\": \"John\"}"),
-                Difference::MismatchedObject(vec![ObjectDifference::MismatchedObjectValue(
+                Difference::MismatchedObject(vec![ObjectComparison::MismatchedObjectValue(
                     "name",
                     Difference::MismatchedString("Jane", "John")
                 )])
@@ -156,8 +167,8 @@ mod tests {
                 &json("{\"name\": \"Jane\", \"age\": 30}"),
                 &json("{\"name\": \"John\"}"),
                 Difference::MismatchedObject(vec![
-                    ObjectDifference::RemovedObjectKey("age", &json("30")),
-                    ObjectDifference::MismatchedObjectValue(
+                    ObjectComparison::RemovedObjectKey("age", &json("30")),
+                    ObjectComparison::MismatchedObjectValue(
                         "name",
                         Difference::MismatchedString("Jane", "John")
                     ),
@@ -174,11 +185,11 @@ mod tests {
                 &json("{\"name\": \"Jane\"}"),
                 &json("{\"name\": \"John\", \"age\": 30}"),
                 Difference::MismatchedObject(vec![
-                    ObjectDifference::MismatchedObjectValue(
+                    ObjectComparison::MismatchedObjectValue(
                         "name",
                         Difference::MismatchedString("Jane", "John")
                     ),
-                    ObjectDifference::AddedObjectKey("age", &json("30")),
+                    ObjectComparison::AddedObjectKey("age", &json("30")),
                 ])
             )
         );
@@ -192,12 +203,12 @@ mod tests {
                 &json("{\"name\": \"Jane\", \"dob\": \"01/01/1990\"}"),
                 &json("{\"name\": \"John\", \"age\": 30}"),
                 Difference::MismatchedObject(vec![
-                    ObjectDifference::RemovedObjectKey("dob", &json("\"01/01/1990\"")),
-                    ObjectDifference::MismatchedObjectValue(
+                    ObjectComparison::RemovedObjectKey("dob", &json("\"01/01/1990\"")),
+                    ObjectComparison::MismatchedObjectValue(
                         "name",
                         Difference::MismatchedString("Jane", "John")
                     ),
-                    ObjectDifference::AddedObjectKey("age", &json("30")),
+                    ObjectComparison::AddedObjectKey("age", &json("30")),
                 ])
             )
         );
@@ -206,7 +217,7 @@ mod tests {
     #[test]
     fn complex_example() {
         let removed_json = json("{\"person\": {\"name\": \"Jane\", \"age\": 31}}");
-        let removed_array = ArrayDifference::RemovedArrayValue(1, &removed_json);
+        let removed_array = ArrayComparison::RemovedArrayValue(1, &removed_json);
 
         assert_eq!(
             compare(
@@ -217,19 +228,20 @@ mod tests {
                 &json("[{\"person\": {\"name\": \"John\", \"age\": 31}}, {\"person\": {\"name\": \"Jane\", \"age\": 31}}]"),
                 &json("[{\"person\": {\"name\": \"John\", \"age\": 30}}]"),
                 Difference::MismatchedArray(vec![
-                    ArrayDifference::ArrayDifference(
+                    ArrayComparison::ArrayDifference(
                         0,
                         Difference::MismatchedObject(vec![
-                            ObjectDifference::MismatchedObjectValue(
+                            ObjectComparison::MismatchedObjectValue(
                                 "person",
                                 Difference::MismatchedObject(vec![
-                                    ObjectDifference::MismatchedObjectValue(
+                                    ObjectComparison::MismatchedObjectValue(
                                         "age",
                                         Difference::MismatchedNumber(
                                             &serde_json::Number::from(31),
                                             &serde_json::Number::from(30),
                                         ),
                                     ),
+                                    ObjectComparison::Same("name", &serde_json::Value::String("John".to_string())),
                                 ])
                             ),
                         ]),
