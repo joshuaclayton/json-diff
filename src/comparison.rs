@@ -1,10 +1,26 @@
-use super::{ArrayComparison, Difference, ObjectComparison};
+use super::Difference;
 use serde_json::Value;
 
 #[derive(Debug, PartialEq)]
 pub enum Comparison<'a> {
     Same(&'a Value, &'a Value),
     Different(&'a Value, &'a Value, Difference<'a>),
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum ObjectComparison<'a> {
+    AddedObjectKey(&'a str, &'a Value),
+    RemovedObjectKey(&'a str, &'a Value),
+    MismatchedObjectValue(&'a str, Difference<'a>),
+    Same(&'a str, &'a Value),
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum ArrayComparison<'a> {
+    ArrayDifference(usize, Difference<'a>),
+    RemovedArrayValue(usize, &'a Value),
+    AddedArrayValue(usize, &'a Value),
+    Same(usize, &'a Value),
 }
 
 pub fn compare<'a>(left: &'a Value, right: &'a Value) -> Comparison<'a> {
