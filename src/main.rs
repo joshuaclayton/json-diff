@@ -1,3 +1,4 @@
+use colored::*;
 use json_diff::*;
 use serde_json::Value;
 use std::env;
@@ -12,7 +13,7 @@ fn main() -> Result<(), error::Error> {
     match (read_as_json(file1), read_as_json(file2)) {
         (Ok(file1_body), Ok(file2_body)) => {
             let comparison = compare(&file1_body, &file2_body);
-            println!("{:?}", comparison);
+            print_comparison(0, &comparison);
         }
         _ => {
             eprintln!("Failed parsing JSON");
@@ -21,6 +22,106 @@ fn main() -> Result<(), error::Error> {
     }
 
     Ok(())
+}
+
+fn print_comparison(depth: usize, comp: &Comparison) {
+    match comp {
+        Comparison::Same(v1, _) => println!("{}", v1),
+        Comparison::Different(_, _, d) => print_difference(depth, d),
+    }
+}
+
+fn print_difference(depth: usize, diff: &Difference) {
+    let padding = format!("{:width$}", "", width = depth * 2);
+    match diff {
+        Difference::MismatchedString(v1, v2) => print!(
+            "{}\"{}{}\"",
+            padding,
+            format!("{}", v1).red().strikethrough(),
+            format!("{}", v2).green()
+        ),
+        Difference::MismatchedNumber(v1, v2) => print!(
+            "{}{}{}",
+            padding,
+            format!("{}", v1).red().strikethrough(),
+            format!("{}", v2).green()
+        ),
+        Difference::MismatchedBool(v1, v2) => print!(
+            "{}{}{}",
+            padding,
+            format!("{}", v1).red().strikethrough(),
+            format!("{}", v2).green()
+        ),
+        Difference::MismatchedTypes(v1, v2) => print!(
+            "Expected {}, got {}",
+            json_type_name(&v1),
+            json_type_name(&v2)
+        ),
+        Difference::MismatchedArray(xs) => {
+            println!("[");
+            for x in xs {
+                print_array_comparison(depth + 1, &x);
+            }
+            println!("{}]", padding);
+        }
+        Difference::MismatchedObject(xs) => {
+            println!("{}{{", padding);
+            for x in xs {
+                print_object_comparison(depth + 1, &x);
+            }
+            print!("{}}}", padding);
+        }
+    }
+}
+
+fn print_array_comparison(depth: usize, diff: &ArrayComparison) {
+    let padding = format!("{:width$}", "", width = depth * 2);
+    match diff {
+        ArrayComparison::ArrayDifference(_, d) => {
+            print_difference(depth, d);
+            println!(",");
+        }
+
+        ArrayComparison::RemovedArrayValue(_, v) => {
+            println!("{}{},", padding, format!("{}", v).red().strikethrough())
+        }
+
+        ArrayComparison::AddedArrayValue(_, v) => {
+            println!("{}{},", padding, format!("{}", v).green())
+        }
+        ArrayComparison::Same(_, v) => println!("{}{},", padding, v),
+    }
+}
+
+fn print_object_comparison(depth: usize, diff: &ObjectComparison) {
+    let padding = format!("{:width$}", "", width = depth * 2);
+    match diff {
+        ObjectComparison::MismatchedObjectValue(k, d) => {
+            print!("{}\"{}\": ", padding, k.yellow());
+            print_difference(depth, d);
+            println!(",");
+        }
+        ObjectComparison::RemovedObjectKey(k, v) => println!(
+            "{}{},",
+            padding,
+            format!("\"{}\": {}", k, v).red().strikethrough()
+        ),
+        ObjectComparison::AddedObjectKey(k, v) => {
+            println!("{}{},", padding, format!("\"{}\": {}", k, v).green())
+        }
+        ObjectComparison::Same(k, v) => println!("{}\"{}\": {},", padding, k, v),
+    }
+}
+
+fn json_type_name(json: &Value) -> String {
+    match json {
+        Value::Number(_) => "number".to_string(),
+        Value::String(_) => "string".to_string(),
+        Value::Bool(_) => "bool".to_string(),
+        Value::Null => "null".to_string(),
+        Value::Object(_) => "object".to_string(),
+        Value::Array(_) => "array".to_string(),
+    }
 }
 
 fn read_as_json<P: AsRef<Path>>(filename: P) -> Result<Value, error::Error> {
