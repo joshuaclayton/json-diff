@@ -1,3 +1,4 @@
+use super::lcs::{DiffComponent, LcsTable};
 use super::Difference;
 use serde_json::Value;
 
@@ -52,27 +53,68 @@ fn compare_different_values<'a>(left: &'a Value, right: &'a Value) -> Difference
 fn compare_arrays_of_values<'a>(left: &'a Vec<Value>, right: &'a Vec<Value>) -> Difference<'a> {
     let mut comparisons: Vec<ArrayComparison<'a>> = vec![];
 
-    let mut rights = right.iter();
-    for (index, left_item) in left.iter().enumerate() {
-        match rights.next() {
-            Some(right_item) => match compare_values(left_item, right_item) {
-                None => comparisons.extend(vec![ArrayComparison::Same(index, right_item)]),
-                Some(otherwise) => {
-                    comparisons.extend(vec![ArrayComparison::ArrayDifference(index, otherwise)])
-                }
-            },
-            None => comparisons.push(ArrayComparison::RemovedArrayValue(index, left_item)),
-        }
-    }
+    let table = LcsTable::new(left, right);
+    let diff = table.diff();
 
-    for (index, remainder) in rights.enumerate() {
-        comparisons.push(ArrayComparison::AddedArrayValue(
-            index + left.len(),
-            remainder,
-        ));
+    let mut index = 0;
+
+    for chunk in diff.chunks(2) {
+        let c1 = &chunk[0];
+
+        match (c1, chunk.get(1)) {
+            (DiffComponent::Deletion(v1), Some(DiffComponent::Insertion(v2))) => {
+                comparisons.push(ArrayComparison::ArrayDifference(
+                    index,
+                    compare_different_values(v1, v2),
+                ));
+
+                index += 1;
+            }
+
+            (DiffComponent::Insertion(v1), Some(DiffComponent::Deletion(v2))) => {
+                comparisons.push(ArrayComparison::ArrayDifference(
+                    index,
+                    compare_different_values(v2, v1),
+                ));
+
+                index += 1;
+            }
+
+            (v1, Some(v2)) => {
+                comparisons.push(go(v1, &mut index));
+                comparisons.push(go(v2, &mut index));
+            }
+
+            (v, None) => comparisons.push(go(v, &mut index)),
+        };
     }
 
     Difference::MismatchedArray(comparisons)
+}
+
+fn go<'a>(diff: &DiffComponent<&'a Value>, index: &mut usize) -> ArrayComparison<'a> {
+    match diff {
+        DiffComponent::Insertion(v1) => {
+            let result = ArrayComparison::AddedArrayValue(*index, v1);
+            *index += 1;
+
+            result
+        }
+
+        DiffComponent::Deletion(v1) => {
+            let result = ArrayComparison::RemovedArrayValue(*index, v1);
+            *index += 1;
+
+            result
+        }
+
+        DiffComponent::Unchanged(_, v1) => {
+            let result = ArrayComparison::Same(*index, v1);
+            *index += 1;
+
+            result
+        }
+    }
 }
 
 fn compare_maps<'a>(

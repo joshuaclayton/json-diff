@@ -120,25 +120,24 @@ mod tests {
                 ])
             )
         );
+    }
 
+    #[test]
+    fn handles_complex_array_interactions() {
         assert_eq!(
-            compare(&json("[1, 2, 3]"), &json("[\"1\", \"2\", \"4\"]")),
+            compare(&json("[1, 2, 3, 4, 5, 8]"), &json("[1, 2, 4, 5, 6, 7, 8]")),
             Comparison::Different(
-                &json("[1, 2, 3]"),
-                &json("[\"1\", \"2\", \"4\"]"),
+                &json("[1, 2, 3, 4, 5, 8]"),
+                &json("[1, 2, 4, 5, 6, 7, 8]"),
                 Difference::MismatchedArray(vec![
-                    ArrayComparison::ArrayDifference(
-                        0,
-                        Difference::MismatchedTypes(&json("1"), &json("\"1\""))
-                    ),
-                    ArrayComparison::ArrayDifference(
-                        1,
-                        Difference::MismatchedTypes(&json("2"), &json("\"2\""))
-                    ),
-                    ArrayComparison::ArrayDifference(
-                        2,
-                        Difference::MismatchedTypes(&json("3"), &json("\"4\""))
-                    )
+                    ArrayComparison::Same(0, &json("1")),
+                    ArrayComparison::Same(1, &json("2")),
+                    ArrayComparison::RemovedArrayValue(2, &json("3")),
+                    ArrayComparison::Same(3, &json("4")),
+                    ArrayComparison::Same(4, &json("5")),
+                    ArrayComparison::AddedArrayValue(5, &json("6")),
+                    ArrayComparison::AddedArrayValue(6, &json("7")),
+                    ArrayComparison::Same(7, &json("8")),
                 ])
             )
         );
