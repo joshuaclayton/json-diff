@@ -70,6 +70,36 @@ pub fn value_at(document: &Value, selector: &str) -> Result<Value, String> {
     }
 }
 
+fn value_at_selector(document: &Value, selectors: &mut Vec<Selector>) -> Option<Value> {
+    if selectors.is_empty() {
+        Some(document.clone())
+    } else {
+        let current_key = selectors.remove(0);
+        match (document, current_key) {
+            (Value::Array(array_value), Selector::ArrayIndex(idx)) => {
+                value_at_selector(&array_value[idx], selectors)
+            }
+
+            (Value::Array(array_value), Selector::LastElementInArray) => {
+                if let Some(last) = array_value.last() {
+                    value_at_selector(&last, selectors)
+                } else {
+                    None
+                }
+            }
+
+            (Value::Object(ref dict), Selector::Key(ref key)) => {
+                if let Some(value) = dict.get(key) {
+                    value_at_selector(&value, selectors)
+                } else {
+                    None
+                }
+            }
+            (_, _) => None,
+        }
+    }
+}
+
 pub fn mutate_at(document: &mut Value, selector: &str, new_value: Value) {
     let selector = parse(selector).unwrap().1;
 
@@ -108,6 +138,10 @@ fn mutate_at_selector(document: &mut Value, selectors: &mut Vec<Selector>, new_v
             (Value::Object(ref mut dict), Selector::Key(ref key)) => {
                 if let Some(mut value) = dict.get_mut(key) {
                     mutate_at_selector(&mut value, selectors, new_value)
+                } else {
+                    if selectors.is_empty() {
+                        dict.insert(key.to_string(), new_value);
+                    }
                 }
             }
             (_, _) => (),
@@ -115,32 +149,93 @@ fn mutate_at_selector(document: &mut Value, selectors: &mut Vec<Selector>, new_v
     }
 }
 
-fn value_at_selector(document: &Value, selectors: &mut Vec<Selector>) -> Option<Value> {
+pub fn insert_at(document: &mut Value, selector: &str, new_value: Value) {
+    let selector = parse(selector).unwrap().1;
+
+    match selector {
+        JsonSelector::FullDocument => {
+            *document = new_value;
+        }
+        JsonSelector::JsonSelector(mut values) => {
+            insert_at_selector(document, &mut values, new_value)
+        }
+    }
+}
+
+fn insert_at_selector(document: &mut Value, selectors: &mut Vec<Selector>, new_value: Value) {
     if selectors.is_empty() {
-        Some(document.clone())
+        *document = new_value;
     } else {
         let current_key = selectors.remove(0);
         match (document, current_key) {
             (Value::Array(array_value), Selector::ArrayIndex(idx)) => {
-                value_at_selector(&array_value[idx], selectors)
+                if array_value.len() == idx && selectors.is_empty() {
+                    array_value.push(new_value);
+                } else {
+                    if idx < array_value.len() {
+                        array_value.insert(idx, new_value);
+                    }
+                }
             }
 
             (Value::Array(array_value), Selector::LastElementInArray) => {
-                if let Some(last) = array_value.last() {
-                    value_at_selector(&last, selectors)
+                array_value.push(new_value);
+            }
+
+            (Value::Object(ref mut dict), Selector::Key(ref key)) => {
+                if let Some(mut value) = dict.get_mut(key) {
+                    insert_at_selector(&mut value, selectors, new_value)
                 } else {
-                    None
+                    if selectors.is_empty() {
+                        dict.insert(key.to_string(), new_value);
+                    }
+                }
+            }
+            (_, _) => (),
+        }
+    }
+}
+
+pub fn delete_at(document: &mut Value, selector: &str) {
+    let selector = parse(selector).unwrap().1;
+
+    match selector {
+        JsonSelector::FullDocument => {
+            *document = Value::Null;
+        }
+        JsonSelector::JsonSelector(mut values) => delete_at_selector(document, &mut values),
+    }
+}
+
+fn delete_at_selector(document: &mut Value, selectors: &mut Vec<Selector>) {
+    if selectors.is_empty() {
+    } else {
+        let current_key = selectors.remove(0);
+        match (document, current_key, selectors.len()) {
+            (Value::Array(array_value), Selector::ArrayIndex(idx), 0) => {
+                if idx < array_value.len() {
+                    array_value.remove(idx);
+                }
+            }
+            (Value::Array(array_value), Selector::ArrayIndex(idx), _) => {
+                if idx < array_value.len() {
+                    delete_at_selector(&mut array_value[idx], selectors)
                 }
             }
 
-            (Value::Object(ref dict), Selector::Key(ref key)) => {
-                if let Some(value) = dict.get(key) {
-                    value_at_selector(&value, selectors)
-                } else {
-                    None
+            (Value::Array(array_value), Selector::LastElementInArray, 0) => {
+                array_value.pop();
+            }
+
+            (Value::Object(ref mut dict), Selector::Key(ref key), 0) => {
+                dict.remove(key);
+            }
+            (Value::Object(ref mut dict), Selector::Key(ref key), _) => {
+                if let Some(mut value) = dict.get_mut(key) {
+                    delete_at_selector(&mut value, selectors)
                 }
             }
-            (_, _) => None,
+            (_, _, _) => (),
         }
     }
 }
@@ -236,6 +331,28 @@ mod tests {
         mutate_at(&mut base, "/a/3/new-object/0", json("3"));
         mutate_at(&mut base, "/a/5/new-object/0", json("3"));
         assert_eq!(base, json("{\"a\": [2, 3, 0, {\"new-object\": [3,2]}]}"));
+    }
+
+    #[test]
+    fn delete_at_selector() {
+        let mut base = json("{\"a\": [{\"b\": [1,2,3]}, [1, 2]]}");
+        delete_at(&mut base, "/a/1/1");
+        assert_eq!(base, json("{\"a\": [{\"b\": [1,2,3]}, [1]]}"));
+
+        delete_at(&mut base, "/a/0/b/2");
+        assert_eq!(base, json("{\"a\": [{\"b\": [1,2]}, [1]]}"));
+
+        delete_at(&mut base, "/a/1");
+        assert_eq!(base, json("{\"a\": [{\"b\": [1,2]}]}"));
+
+        delete_at(&mut base, "/a/0/c/1");
+        assert_eq!(base, json("{\"a\": [{\"b\": [1,2]}]}"));
+
+        delete_at(&mut base, "/a/0/b/1");
+        assert_eq!(base, json("{\"a\": [{\"b\": [1]}]}"));
+
+        delete_at(&mut base, "/a");
+        assert_eq!(base, json("{}"));
     }
 
     fn json(input: &str) -> Value {

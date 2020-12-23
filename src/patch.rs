@@ -17,7 +17,6 @@ pub enum Operation<'a> {
         path: &'a str,
         from: &'a str,
     },
-
     Copy {
         path: &'a str,
         from: &'a str,
@@ -54,7 +53,54 @@ impl<'a> Operation<'a> {
                     Err(OperationError::InvalidKey(path))
                 }
             }
-            _ => Ok(json),
+
+            Operation::Copy { path, from } => {
+                if let Some(found_value) = json_selector::value_at(&json, from).ok() {
+                    let mut new_json = json.clone();
+                    json_selector::mutate_at(&mut new_json, path, found_value);
+                    Ok(new_json)
+                } else {
+                    Err(OperationError::InvalidKey(from))
+                }
+            }
+            Operation::Move { path, from } => {
+                if path.starts_with(from) {
+                    Err(OperationError::DisallowedMove(path))
+                } else {
+                    if let Some(found_value) = json_selector::value_at(&json, from).ok() {
+                        let mut new_json = json.clone();
+                        json_selector::delete_at(&mut new_json, from);
+                        json_selector::mutate_at(&mut new_json, path, found_value);
+                        Ok(new_json)
+                    } else {
+                        Err(OperationError::InvalidKey(from))
+                    }
+                }
+            }
+            Operation::Replace { path, value } => {
+                if let Some(_) = json_selector::value_at(&json, path).ok() {
+                    let mut new_json = json.clone();
+                    json_selector::mutate_at(&mut new_json, path, value.clone());
+                    Ok(new_json)
+                } else {
+                    Err(OperationError::InvalidKey(path))
+                }
+            }
+
+            Operation::Remove { path } => {
+                if let Some(_) = json_selector::value_at(&json, path).ok() {
+                    let mut new_json = json.clone();
+                    json_selector::delete_at(&mut new_json, path);
+                    Ok(new_json)
+                } else {
+                    Err(OperationError::InvalidKey(path))
+                }
+            }
+            Operation::Add { path, value } => {
+                let mut new_json = json.clone();
+                json_selector::insert_at(&mut new_json, path, value.clone());
+                Ok(new_json)
+            }
         }
     }
 }
@@ -203,12 +249,27 @@ mod tests {
     }
 
     #[test]
+    fn replace_fails() {
+        let base = json("{\"a\": 1}");
+        assert_eq!(
+            Operation::apply(
+                base,
+                &Operation::Replace {
+                    path: "/b",
+                    value: json("{\"b\": [1]}")
+                }
+            ),
+            Err(OperationError::InvalidKey("/b"))
+        );
+    }
+
+    #[test]
     fn copy_fails() {
         let base = json("{\"a\": 1}");
         assert_eq!(
             Operation::apply(
                 base,
-                &Operation::Move {
+                &Operation::Copy {
                     path: "/b",
                     from: "/c"
                 }
@@ -228,7 +289,7 @@ mod tests {
                     from: "/a"
                 }
             ),
-            Ok(json("{\"b\": 1"))
+            Ok(json("{\"b\": 1}"))
         );
     }
 
@@ -238,7 +299,7 @@ mod tests {
         assert_eq!(
             Operation::apply(
                 base,
-                &Operation::Copy {
+                &Operation::Move {
                     path: "/a/c",
                     from: "/a"
                 }
@@ -258,7 +319,7 @@ mod tests {
                     from: "/b"
                 }
             ),
-            Err(OperationError::InvalidKey("/c"))
+            Err(OperationError::InvalidKey("/b"))
         );
     }
 
