@@ -1,7 +1,7 @@
 use super::{ArrayComparison, ObjectComparison};
 use serde_json::Value;
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Debug, PartialEq)]
 pub enum Difference<'a> {
     MismatchedString(&'a str, &'a str),
     MismatchedNumber(&'a serde_json::Number, &'a serde_json::Number),

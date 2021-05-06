@@ -11,8 +11,10 @@ fn main() -> Result<(), error::Error> {
     let file2 = &args[2];
     match (read_as_json(file1), read_as_json(file2)) {
         (Ok(file1_body), Ok(file2_body)) => {
+            println!("read contents");
             let comparison = compare(&file1_body, &file2_body);
             println!("{:?}", comparison);
+            // println!("{:?}", patch::generate_patch(&comparison));
         }
         _ => {
             eprintln!("Failed parsing JSON");

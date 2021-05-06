@@ -8,7 +8,7 @@ pub enum Comparison<'a> {
     Different(&'a Value, &'a Value, Difference<'a>),
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Debug, PartialEq)]
 pub enum ObjectComparison<'a> {
     AddedObjectKey(&'a str, &'a Value),
     RemovedObjectKey(&'a str, &'a Value),
@@ -16,7 +16,7 @@ pub enum ObjectComparison<'a> {
     Same(&'a str, &'a Value),
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Debug, PartialEq)]
 pub enum ArrayComparison<'a> {
     ArrayDifference(usize, Difference<'a>),
     RemovedArrayValue(usize, &'a Value),
